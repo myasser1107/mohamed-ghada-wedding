@@ -616,16 +616,18 @@ td.yes{color:#5F7351}td.no{color:#9E3D4C}
   if (previous && previous.name) { fillForm(previous); showDone(previous); }
 
   /* ---------- owner-only replies panel ----------
-     Opens only with the private link (…/#owner=KEY). The key is checked by the Google script, not here. */
+     Shows only when the page is opened with the private link (…/#owner=KEY); the plain guest link never shows it.
+     The key is remembered for this browser tab only, and is checked by the Google script, not here. */
   const OWNER_STORE = "mg-owner-key";
   let ownerKey = null;
+  try { localStorage.removeItem(OWNER_STORE); } catch (e) {}   // clear the key older versions kept permanently
   const ownerMatch = location.hash.match(/owner=([A-Za-z0-9]+)/);
   if (ownerMatch) {
     ownerKey = ownerMatch[1];
-    try { localStorage.setItem(OWNER_STORE, ownerKey); } catch (e) {}
+    try { sessionStorage.setItem(OWNER_STORE, ownerKey); } catch (e) {}
     history.replaceState(null, "", location.pathname + location.search);
   } else {
-    try { ownerKey = localStorage.getItem(OWNER_STORE); } catch (e) {}
+    try { ownerKey = sessionStorage.getItem(OWNER_STORE); } catch (e) {}
   }
   function cell(tr, text, cls){ const td = document.createElement("td"); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); }
   function renderGuests(all){
