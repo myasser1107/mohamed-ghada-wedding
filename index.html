@@ -197,7 +197,7 @@ input[type=text]:focus,textarea:focus{outline:none;border-bottom:1px solid var(-
 .gl-stats{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem}
 .gl-stats span{font-family:var(--f-label);font-size:.66rem;letter-spacing:.18em;text-transform:uppercase;border:.5px solid var(--rose);padding:.4rem .8rem;border-radius:99px;background:rgba(255,255,255,.5)}
 .tbl{overflow-x:auto;background:rgba(255,255,255,.6);border:.5px solid var(--champagne)}
-table{border-collapse:collapse;width:100%;min-width:520px;font-size:1.02rem}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:1.02rem}
 th,td{text-align:left;padding:.7rem 1rem;border-bottom:.5px solid rgba(205,181,150,.6);vertical-align:top}
 th{font-family:var(--f-label);font-weight:400;font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:var(--rosewood)}
 td.yes{color:#5F7351}td.no{color:#9E3D4C}
@@ -382,6 +382,13 @@ td.yes{color:#5F7351}td.no{color:#9E3D4C}
       </div>
     </div>
 
+    <div class="guests" id="guests" hidden>
+      <h3>Your replies</h3>
+      <p class="gl-sub" id="glSub">Only you can see this list. Guests never see it.</p>
+      <div class="gl-stats" id="glStats"></div>
+      <div class="tbl"><table><thead><tr><th>Name</th><th>Reply</th><th>Their note</th><th>When</th></tr></thead><tbody id="glBody"></tbody></table></div>
+      <p style="margin-top:1rem"><button type="button" class="btn btn-line" id="glRefresh">Refresh</button></p>
+    </div>
   </div>
 </section>
 
@@ -607,6 +614,51 @@ td.yes{color:#5F7351}td.no{color:#9E3D4C}
 
   const previous = recall();
   if (previous && previous.name) { fillForm(previous); showDone(previous); }
+
+  /* ---------- owner-only replies panel ----------
+     Opens only with the private link (…/#owner=KEY). The key is checked by the Google script, not here. */
+  const OWNER_STORE = "mg-owner-key";
+  let ownerKey = null;
+  const ownerMatch = location.hash.match(/owner=([A-Za-z0-9]+)/);
+  if (ownerMatch) {
+    ownerKey = ownerMatch[1];
+    try { localStorage.setItem(OWNER_STORE, ownerKey); } catch (e) {}
+    history.replaceState(null, "", location.pathname + location.search);
+  } else {
+    try { ownerKey = localStorage.getItem(OWNER_STORE); } catch (e) {}
+  }
+  function cell(tr, text, cls){ const td = document.createElement("td"); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); }
+  function renderGuests(all){
+    // Keep each guest's latest reply (matched by name), newest first.
+    const latest = new Map();
+    all.slice().sort((a, b) => String(a.time).localeCompare(String(b.time)))
+       .forEach(r => latest.set(String(r.name).trim().toLowerCase(), r));
+    const rows = [...latest.values()].sort((a, b) => String(b.time).localeCompare(String(a.time)));
+    const yes = rows.filter(r => /^yes/i.test(r.attending)).length;
+    $("glStats").replaceChildren(...[rows.length + " replies", yes + " attending", (rows.length - yes) + " not attending"].map(t => { const s = document.createElement("span"); s.textContent = t; return s; }));
+    const body = $("glBody"); body.replaceChildren();
+    if (!rows.length) { const tr = document.createElement("tr"), td = document.createElement("td"); td.colSpan = 4; td.textContent = "No replies yet. They’ll appear here as your guests respond."; tr.appendChild(td); body.appendChild(tr); }
+    rows.forEach(r => {
+      const tr = document.createElement("tr"), isYes = /^yes/i.test(r.attending);
+      cell(tr, r.name); cell(tr, isYes ? "Attending" : "Not attending", isYes ? "yes" : "no"); cell(tr, r.message || "—");
+      const t = new Date(r.time); cell(tr, isNaN(t) ? "" : t.toLocaleDateString(undefined, {day: "numeric", month: "short"}));
+      body.appendChild(tr);
+    });
+    $("guests").hidden = false;
+  }
+  async function loadGuests(){
+    if (!ownerKey) return;
+    $("glRefresh").disabled = true;
+    try {
+      const res = await fetch(RSVP_URL + "?key=" + encodeURIComponent(ownerKey), {cache: "no-store"});
+      const data = JSON.parse(await res.text());
+      if (data && Array.isArray(data.rows)) renderGuests(data.rows);
+    } catch (e) {
+      if (!$("guests").hidden) $("glSub").textContent = "Couldn’t refresh the list. Check your connection and press Refresh.";
+    } finally { $("glRefresh").disabled = false; }
+  }
+  $("glRefresh").addEventListener("click", loadGuests);
+  loadGuests();
 })();
 </script>
 </body>
